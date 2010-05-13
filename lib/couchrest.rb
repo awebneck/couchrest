@@ -14,9 +14,9 @@
 
 require 'rubygems'
 begin
-  require 'json'
+  require 'yajl/json_gem'
 rescue LoadError
-  raise "You need install and require your own json compatible library since couchrest rest couldn't load the json/json_pure gem" unless Kernel.const_defined?("JSON")
+  # raise "You need install and require your own json compatible library since couchrest rest couldn't load the json/json_pure gem" unless Kernel.const_defined?("JSON")
 end
 require 'rest_client'
 

@@ -5,7 +5,7 @@ require File.join(File.expand_path(File.dirname(__FILE__)),'lib','couchrest')
 
 
 begin
-  require 'spec/rake/spectask'
+  require 'rspec/core/rake_task'
 rescue LoadError
   puts <<-EOS
 To use rspec for testing you must install rspec gem:
@@ -52,16 +52,7 @@ task :install => [:package] do
 end
 
 desc "Run all specs"
-Spec::Rake::SpecTask.new('spec') do |t|
-	t.spec_opts = ["--color"]
-	t.spec_files = FileList['spec/**/*_spec.rb']
-end
-
-desc "Print specdocs"
-Spec::Rake::SpecTask.new(:doc) do |t|
-	t.spec_opts = ["--format", "specdoc"]
-	t.spec_files = FileList['spec/*_spec.rb']
-end
+Rspec::Core::RakeTask.new(:spec)
 
 desc "Generate the rdoc"
 Rake::RDocTask.new do |rdoc|
