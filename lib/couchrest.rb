@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 require 'rubygems'
-require 'yajl/json_gem'
+
 unless self.class.const_defined?("JSON")
   begin
     require 'json'
