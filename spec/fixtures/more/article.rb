@@ -2,6 +2,7 @@ class Article < CouchRest::ExtendedDocument
   use_database DB
   unique_id :slug
   
+  provides_collection :article_details, 'Article', 'by_date', :descending => true, :include_docs => true
   view_by :date, :descending => true
   view_by :user_id, :date
     
@@ -19,10 +20,10 @@ class Article < CouchRest::ExtendedDocument
         return sum(values);
       }"  
 
-  property :date
+  property :date, :type => 'Date'
   property :slug, :read_only => true
   property :title
-  property :tags
+  property :tags, :type => ['String']
 
   timestamps!
   

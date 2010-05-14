@@ -44,7 +44,14 @@ module CouchRest
         CouchRest.get url
       end
     end
-  
+
+    # Query a CouchDB-Lucene search view
+    def search(name, params={})
+      # -> http://localhost:5984/yourdb/_fti/YourDesign/by_name?include_docs=true&q=plop*'
+      url = CouchRest.paramify_url "#{root}/_fti/#{name}", params
+      CouchRest.get url
+    end
+
     # load a set of documents by passing an array of ids
     def get_bulk(ids)
       documents(:keys => ids, :include_docs => true)
@@ -107,7 +114,6 @@ module CouchRest
     # PUT an attachment directly to CouchDB
     def put_attachment(doc, name, file, options = {})
       docid = escape_docid(doc['_id'])
-      name = CGI.escape(name)
       uri = url_for_attachment(doc, name)
       JSON.parse(HttpAbstraction.put(uri, file, options))
     end
@@ -250,6 +256,33 @@ module CouchRest
       CouchRest.copy "#{@root}/#{slug}", destination
     end
     
+    # Updates the given doc by yielding the current state of the doc
+    # and trying to update update_limit times. Returns the new doc
+    # if the doc was successfully updated without hitting the limit
+    def update_doc(doc_id, params = {}, update_limit=10)
+      resp = {'ok' => false}
+      new_doc = nil
+      last_fail = nil
+
+      until resp['ok'] or update_limit <= 0
+        doc = self.get(doc_id, params)  # grab the doc
+        new_doc = yield doc # give it to the caller to be updated
+        begin
+          resp = self.save_doc new_doc # try to PUT the updated doc into the db
+        rescue RestClient::RequestFailed => e
+          if e.http_code == 409 # Update collision
+            update_limit -= 1
+            last_fail = e
+          else # some other error
+            raise e
+          end
+        end
+      end
+
+      raise last_fail unless resp['ok']
+      new_doc
+    end
+    
     # Compact the database, removing old document revisions and optimizing space use.
     def compact!
       CouchRest.post "#{@root}/_compact"
@@ -265,21 +298,19 @@ module CouchRest
     def recreate!
       delete!
       create!
-    rescue HttpAbstraction::ResourceNotFound
+    rescue RestClient::ResourceNotFound
     ensure
       create!
     end
     
     # Replicates via "pulling" from another database to this database. Makes no attempt to deal with conflicts.
-    def replicate_from other_db
-      raise ArgumentError, "must provide a CouchReset::Database" unless other_db.kind_of?(CouchRest::Database)
-      CouchRest.post "#{@host}/_replicate", :source => other_db.root, :target => name
+    def replicate_from other_db, continuous=false
+      replicate other_db, continuous, :target => name
     end
     
     # Replicates via "pushing" to another database. Makes no attempt to deal with conflicts.
-    def replicate_to other_db
-      raise ArgumentError, "must provide a CouchReset::Database" unless other_db.kind_of?(CouchRest::Database)
-      CouchRest.post "#{@host}/_replicate", :target => other_db.root, :source => name
+    def replicate_to other_db, continuous=false
+      replicate other_db, continuous, :source => name
     end
     
     # DELETE the database itself. This is not undoable and could be rather
@@ -290,6 +321,19 @@ module CouchRest
     end
 
     private
+    
+    def replicate other_db, continuous, options
+      raise ArgumentError, "must provide a CouchReset::Database" unless other_db.kind_of?(CouchRest::Database)
+      raise ArgumentError, "must provide a target or source option" unless (options.key?(:target) || options.key?(:source))
+      payload = options
+      if options.has_key?(:target)
+        payload[:source] = other_db.root
+      else
+        payload[:target] = other_db.root
+      end
+      payload[:continuous] = continuous
+      CouchRest.post "#{@host}/_replicate", payload
+    end
     
     def clear_extended_doc_fresh_cache
       ::CouchRest::ExtendedDocument.subclasses.each{|klass| klass.design_doc_fresh = false if klass.respond_to?(:design_doc_fresh=) }

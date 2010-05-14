@@ -3,17 +3,18 @@
 require File.expand_path("../../../spec_helper", __FILE__)
 require File.join(FIXTURE_PATH, 'more', 'article')
 require File.join(FIXTURE_PATH, 'more', 'course')
+require File.join(FIXTURE_PATH, 'more', 'card')
 require File.join(FIXTURE_PATH, 'more', 'cat')
 
 describe "ExtendedDocument" do
   
   class WithDefaultValues < CouchRest::ExtendedDocument
     use_database TEST_SERVER.default_database
-    property :preset,       :default => {:right => 10, :top_align => false}
-    property :set_by_proc,  :default => Proc.new{Time.now},       :cast_as => 'Time'
-    property :tags,         :default => []
+    property :preset, :type => 'Object', :default => {:right => 10, :top_align => false}
+    property :set_by_proc, :default => Proc.new{Time.now}, :cast_as => 'Time'
+    property :tags, :type => ['String'], :default => []
     property :read_only_with_default, :default => 'generic', :read_only => true
-    property :default_false, :default => false
+    property :default_false, :type => 'Boolean', :default => false
     property :name
     timestamps!
   end
@@ -104,6 +105,18 @@ describe "ExtendedDocument" do
       self.other_arg = "foo-#{value}"
     end
   end
+
+  class WithAfterInitializeMethod < CouchRest::ExtendedDocument
+    use_database TEST_SERVER.default_database
+    
+    property :some_value
+
+    def after_initialize
+      self.some_value ||= "value"
+    end
+
+  end
+
   
   before(:each) do
     @obj = WithDefaultValues.new
@@ -383,7 +396,7 @@ describe "ExtendedDocument" do
         "professor" => {
           "name" => ["Mark", "Hinchliff"]
         },
-        "final_test_at" => "2008/12/19 13:00:00 +0800"
+        "ends_at" => "2008/12/19 13:00:00 +0800"
       }
       r = Course.database.save_doc course_doc
       @course = Course.get r['id']
@@ -394,8 +407,8 @@ describe "ExtendedDocument" do
     it "should instantiate the professor as a person" do
       @course['professor'].last_name.should == "Hinchliff"
     end
-    it "should instantiate the final_test_at as a Time" do
-      @course['final_test_at'].should == Time.parse("2008/12/19 13:00:00 +0800")
+    it "should instantiate the ends_at as a Time" do
+      @course['ends_at'].should == Time.parse("2008/12/19 13:00:00 +0800")
     end
   end
   
@@ -414,7 +427,16 @@ describe "ExtendedDocument" do
       obj.created_at.should be_an_instance_of(Time)
       obj.updated_at.should be_an_instance_of(Time)
       obj.created_at.to_s.should == @obj.updated_at.to_s
-    end 
+    end
+    
+    it "should not change created_at on update" do
+      2.times do 
+        lambda do
+          @art.save
+        end.should_not change(@art, :created_at)
+      end
+    end
+     
     it "should set the time on create" do
       (Time.now - @art.created_at).should < 2
       foundart = Article.get @art.id
@@ -698,6 +720,13 @@ describe "ExtendedDocument" do
       @doc.other_arg.should == "foo-foo"
     end
   end
+
+  describe "initialization" do
+    it "should call after_initialize method if available" do
+      @doc = WithAfterInitializeMethod.new
+      @doc['some_value'].should eql('value')
+    end
+  end
   
   describe "recursive validation on an extended document" do
     before :each do
@@ -743,4 +772,36 @@ describe "ExtendedDocument" do
       cat.save.should be_true
     end
   end
+
+  describe "searching the contents of an extended document" do
+    before :each do
+      @db = reset_test_db!
+
+      names = ["Fuzzy", "Whiskers", "Mr Bigglesworth", "Sockington", "Smitty", "Sammy", "Samson", "Simon"]
+      names.each { |name| Cat.create(:name => name) }
+
+      search_function = { 'defaults' => {'store' => 'no', 'index' => 'analyzed_no_norms'},
+          'index' => "function(doc) { ret = new Document(); ret.add(doc['name'], {'field':'name'}); return ret; }" }
+      @db.save_doc({'_id' => '_design/search', 'fulltext' => {'cats' => search_function}})
+    end
+
+    it "should be able to paginate through a large set of search results" do
+      if couchdb_lucene_available?
+        names = []
+        Cat.paginated_each(:design_doc => "search", :view_name => "cats",
+             :q => 'name:S*', :search => true, :include_docs => true, :per_page => 3) do |cat|
+           cat.should_not be_nil
+           names << cat.name
+        end
+
+        names.size.should == 5
+        names.should include('Sockington')
+        names.should include('Smitty')
+        names.should include('Sammy')
+        names.should include('Samson')
+        names.should include('Simon')
+      end
+    end
+  end
+
 end
