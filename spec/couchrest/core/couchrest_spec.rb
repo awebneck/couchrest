@@ -28,6 +28,7 @@ describe CouchRest do
   
   it "should restart" do
     @cr.restart!
+    sleep(5); # This is janky as hell, but it works.
   end
 
   it "should provide one-time access to uuids" do
@@ -243,5 +244,4 @@ describe CouchRest do
       CouchRest.proxy nil
     end
   end
-
 end
