@@ -14,16 +14,18 @@ module CouchRest
     include CouchRest::Mixins::ExtendedAttachments
     include CouchRest::Mixins::ClassProxy
     include CouchRest::Mixins::Collection
-		include CouchRest::Mixins::AttributeProtection
+    include CouchRest::Mixins::AttributeProtection
 
     def self.subclasses
       @subclasses ||= []
     end
     
     def self.inherited(subklass)
+      super
       subklass.send(:include, CouchRest::Mixins::Properties)
       subklass.class_eval <<-EOS, __FILE__, __LINE__ + 1
         def self.inherited(subklass)
+          super
           subklass.properties = self.properties.dup
         end
       EOS
@@ -38,15 +40,25 @@ module CouchRest
     define_callbacks :save, "result == :halt"
     define_callbacks :update, "result == :halt"
     define_callbacks :destroy, "result == :halt"
+
+    # Creates a new instance, bypassing attribute protection
+    #
+    # ==== Returns
+    #  a document instance
+    def self.create_from_database(passed_keys={})
+      new(passed_keys, :directly_set_attributes => true)      
+    end
     
-    def initialize(passed_keys={})
+    def initialize(passed_keys={}, options={})
       apply_defaults # defined in CouchRest::Mixins::Properties
-	  set_attributes(passed_keys) unless passed_keys.nil?
-      super
+      remove_protected_attributes(passed_keys) unless options[:directly_set_attributes]
+      directly_set_attributes(passed_keys) unless passed_keys.nil?
+      super(passed_keys)
       cast_keys      # defined in CouchRest::Mixins::Properties
       unless self['_id'] && self['_rev']
         self['couchrest-type'] = self.class.to_s
       end
+      after_initialize if respond_to?(:after_initialize)
     end
     
     # Defines an instance and save it directly to the database 
@@ -73,9 +85,9 @@ module CouchRest
     # on the document whenever saving occurs. CouchRest uses a pretty
     # decent time format by default. See Time#to_json
     def self.timestamps!
-      class_eval <<-EOS, __FILE__, __LINE__ + 1
-        property(:updated_at, :read_only => true, :cast_as => 'Time', :auto_validation => false)
-        property(:created_at, :read_only => true, :cast_as => 'Time', :auto_validation => false)
+      class_eval <<-EOS, __FILE__, __LINE__
+        property(:updated_at, :read_only => true, :type => 'Time', :auto_validation => false)
+        property(:created_at, :read_only => true, :type => 'Time', :auto_validation => false)
         
         set_callback :save, :before do |object|
           object['updated_at'] = Time.now
@@ -281,14 +293,18 @@ module CouchRest
         raise NoMethodError, "#{attribute_name}= method not available, use property :#{attribute_name}" unless self.respond_to?("#{attribute_name}=")
       end      
 		end
-
-		def set_attributes(hash)
-			attrs = remove_protected_attributes(hash)
-      attrs.each do |attribute_name, attribute_value|
+    
+    def directly_set_attributes(hash)
+      hash.each do |attribute_name, attribute_value|
         if self.respond_to?("#{attribute_name}=")
-          self.send("#{attribute_name}=", attrs.delete(attribute_name))
+          self.send("#{attribute_name}=", hash.delete(attribute_name))
         end
       end
+    end
+    
+		def set_attributes(hash)
+			attrs = remove_protected_attributes(hash)
+			directly_set_attributes(attrs)
 		end
   end
 end

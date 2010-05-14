@@ -15,11 +15,12 @@ Spork.prefork do
 
     COUCHHOST = "http://127.0.0.1:5984"
     TESTDB    = 'couchrest-test'
+    REPLICATIONDB = 'couchrest-test-replication'
     TEST_SERVER    = CouchRest.new
     TEST_SERVER.default_database = TESTDB
     DB = TEST_SERVER.database(TESTDB)
   end
-
+  
   class Basic < CouchRest::ExtendedDocument
     use_database TEST_SERVER.default_database
   end
@@ -27,6 +28,16 @@ Spork.prefork do
   def reset_test_db!
     DB.recreate! rescue nil 
     DB
+  end
+  
+  def couchdb_lucene_available?
+    lucene_path = "http://localhost:5985/"
+    url = URI.parse(lucene_path)
+    req = Net::HTTP::Get.new(url.path)
+    res = Net::HTTP.new(url.host, url.port).start { |http| http.request(req) }
+    true
+   rescue Exception => e
+    false
   end
 
   Rspec.configure do |config|
@@ -53,22 +64,10 @@ Spork.prefork do
     # uncomment the following line.
     # config.use_transactional_examples = false
   end
-  
+
 end
 
 Spork.each_run do
   # This code will be run each time you run your specs.
-  
+
 end
-
-# --- Instructions ---
-# - Sort through your spec_helper file. Place as much environment loading 
-#   code that you don't normally modify during development in the 
-#   Spork.prefork block.
-# - Place the rest under Spork.each_run block
-# - Any code that is left outside of the blocks will be ran during preforking
-#   and during each_run!
-# - These instructions should self-destruct in 10 seconds.  If they don't,
-#   feel free to delete them.
-#
-
