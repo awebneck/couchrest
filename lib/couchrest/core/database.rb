@@ -48,7 +48,7 @@ module CouchRest
     # Query a CouchDB-Lucene search view
     def search(name, params={})
       # -> http://localhost:5984/yourdb/_fti/YourDesign/by_name?include_docs=true&q=plop*'
-      url = CouchRest.paramify_url "#{root}/_fti/#{name}", params
+      url = CouchRest.paramify_url "#{root}/_fti/_design/#{name}", params
       CouchRest.get url
     end
 

@@ -56,7 +56,7 @@ Spork.prefork do
       cr = TEST_SERVER
       test_dbs = cr.databases.select { |db| db =~ /^#{TESTDB}/ }
       test_dbs.each do |db|
-        cr.database(db).delete! rescue nil
+        # cr.database(db).delete! rescue nil
       end
     end
 
