@@ -28,7 +28,7 @@ describe CouchRest do
   
   it "should restart" do
     @cr.restart!
-    sleep(5); # This is janky as hell, but it works.
+    sleep(6); # This is janky as hell, but it works.
   end
 
   it "should provide one-time access to uuids" do
